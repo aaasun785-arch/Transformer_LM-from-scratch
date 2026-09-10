@@ -121,13 +121,13 @@ def train_bpe(input_path:Union[str,os.PathLike],
             boundaries=[i*chunk_size for i in range(num_workers+1)]
             boundaries[-1]=file_size
 
-    with mp.Pool(processes=num_workers)as pool:
-        args=[
+    """ with mp.Pool(processes=num_workers)as pool: """
+    args=[
             (input_path,start,end,special_tokens)
             for start,end in zip(boundaries[:-1],boundaries[1:])#zip()表示配对一个区间
 
         ]
-        results=pool.starmap(process_chunk_for_word_counts,args)
+    results=[process_chunk_for_word_counts(*arg)for arg in args]
     #从多线程中统计总词频
     word_cnt=defaultdict(int)
     for result in results:
