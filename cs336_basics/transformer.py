@@ -514,6 +514,8 @@ def training_together(train_path,
                 checkpoint_path,
             )
     run.finish()
+
+@torch.no_grad()
 def decode(model:nn.Module,
     tokenizer,
     prompt: str,
@@ -523,20 +525,20 @@ def decode(model:nn.Module,
     eos_token: str = "<|endoftext|>"):
     model.eval()
     device=next(model.parameters()).device
-
+    context_length:int=256,
     token_ids=tokenizer.encode(prompt)
-    tokens=torch.Tensor(token_ids,device=device).unsqueeze(0)
-    eos_token_id=tokenizer.encode(eos_token[0])
+    tokens=torch.tensor(token_ids,dtype=torch.long,device=device).unsqueeze(0)
+    eos_token_id=tokenizer.encode(eos_token)[0]
 
-    for _ in max_new_tokens:
+    for _ in range(max_new_tokens):
         if "has max_length":
-            model_input=tokens[:-model.context_length]
+            model_input=tokens[:,-context_length]
         else:
             model_input=tokens
         logits=model(model_input)
         next_token_logits=logits[:,-1,:]
         if temperature==0:
-            next_token=torch.argmax(logits,dim=-1,keepdim=True)
+            next_token=torch.argmax(next_token_logits,dim=-1,keepdim=True)
         else:
             if temperature<0:
                 raise ValueError
@@ -552,7 +554,7 @@ def decode(model:nn.Module,
     output=tokenizer.decode(output0)
     return output
 def apply_top_p(probs,top_p):
-    sorted_probs,sorted_indices=torch.sort(probs,dim=1,descending=True)
+    sorted_probs,sorted_indices=torch.sort(sorted_probs,dim=1,descending=True)
     cumsum_probs=torch.cumsum(probs,-1)
     sorted_mask=(cumsum_probs-sorted_probs)>top_p
     sorted_probs=torch.masked_fill(sorted_probs,sorted_mask,0.0)
