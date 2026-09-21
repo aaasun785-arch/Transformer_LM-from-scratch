@@ -447,7 +447,9 @@ run=wandb.init(
         "learning_rate": 1e-3,
         "batch_size": 32,
         "max_steps": 5000
-    }
+    },
+    reinit=True
+
 )
 start_time=time.time()
 def training_together(train_path,
