@@ -1,28 +1,16 @@
-# TRANSFORMER-LM FROM SCRATCH
+# Transformer-LM：from scratch
 
 从零实现并训练一个 Decoder-only Transformer 语言模型，覆盖文本分词、数据预处理、模型构建、训练验证、实验追踪和文本生成。
 使用 PyTorch 实现，BPE Tokenizer、AdamW 优化器、causal multi-head attention和训练流程均从基础模块开始构建，主要在 TinyStories 数据集上进行训练和实验。
 
 基于 [Stanford CS336: Language Modeling from Scratch](https://cs336.stanford.edu/) Assignment 1 。
 
-<p align="center">
-  <img src="docs/figures/屏幕截图 2026-09-22 210744.png"
-       alt="训练示例"
-       width="760">
-</p>
-
 ## 项目概览
 
 Transformer-LM 实现了从原始文本到生成文本的完整语言模型训练流程：
 
-```mermaid
-flowchart LR
-    A["原始文本"] --> B["Tokenizer"]
-    B --> C["二进制数据集"]
-    C --> D["Transformer训练"]
-    D --> E["模型Checkpoint"]
-    E --> F["文本生成"]
-```
+原始文本-> Tokenizer -> 二进制数据集 -> Transformer训练  -> 文本生成
+
 不调用现成的 Transformer 模型，主要部分从零开始构建，同时建立一套可复现的训练与实验流程。
 
 ## 主要实现
@@ -75,6 +63,7 @@ flowchart LR
 </p>
 
 固定其他参数，在不同temperature和top-p下生成文本结果在："docs/output-text.md"
+
 示例：
 ```text
 ===== Generated Text =====
