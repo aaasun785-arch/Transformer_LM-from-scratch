@@ -1,50 +1,98 @@
-# CS336 Spring 2025 Assignment 1: Basics
+# TRANSFORMER-LM FROM SCRATCH
 
-For a full description of the assignment, see the assignment handout at
-[cs336_assignment1_basics.pdf](./cs336_assignment1_basics.pdf)
+从零实现并训练一个 Decoder-only Transformer 语言模型，覆盖文本分词、数据预处理、模型构建、训练验证、实验追踪和文本生成。
+使用 PyTorch 实现，BPE Tokenizer、AdamW 优化器、causal multi-head attention和训练流程均从基础模块开始构建，主要在 TinyStories 数据集上进行训练和实验。
 
-If you see any issues with the assignment handout or code, please feel free to
-raise a GitHub issue or open a pull request with a fix.
+基于 [Stanford CS336: Language Modeling from Scratch](https://cs336.stanford.edu/) Assignment 1 。
 
-## Setup
+<p align="center">
+  <img src="docs/figures/屏幕截图 2026-09-22 210744.png"
+       alt="训练示例"
+       width="760">
+</p>
 
-### Environment
-We manage our environments with `uv` to ensure reproducibility, portability, and ease of use.
-Install `uv` [here](https://github.com/astral-sh/uv#installation) (recommended), or run `pip install uv`/`brew install uv`.
-We recommend reading a bit about managing projects in `uv` [here](https://docs.astral.sh/uv/guides/projects/#managing-dependencies) (you will not regret it!).
+## 项目概览
 
-You can now run any code in the repo using
-```sh
-uv run <python_file_path>
+Transformer-LM 实现了从原始文本到生成文本的完整语言模型训练流程：
+
+```mermaid
+flowchart LR
+    A["原始文本"] --> B["Tokenizer"]
+    B --> C["二进制数据集"]
+    C --> D["Transformer训练"]
+    D --> E["模型Checkpoint"]
+    E --> F["文本生成"]
 ```
-and the environment will be automatically solved and activated when necessary.
+不调用现成的 Transformer 模型，主要部分从零开始构建，同时建立一套可复现的训练与实验流程。
 
-### Run unit tests
+## 主要实现
+
+模型组件：
+
+- Linear 与 Embedding；
+- RMSNorm；
+- RoPE；
+- Causal Multi-Head Self-Attention；
+- SwiGLU ；
+- Pre-Norm Transformer Block；
+- Decoder-only Transformer Language Model。
+
+训练组件：
+
+- Byte-level BPE Tokenizer；
+- Cross-Entropy Loss；
+- AdamW 优化器；
+- Learning Rate Schedule；
+- Gradient Clipping；
+- 基于 `np.memmap` 的数据加载；
+- 定期验证与指标记录；
+- Weights & Biases 实验追踪。
+
+生成组件：
+
+- Temperature Sampling；
+- Top-p Sampling；
 
 
-```sh
-uv run pytest
+## 实验结果
+- 比较了不同学习率对训练稳定性和收敛速度的影响；
+- 比较了不同模型规模下的验证损失、训练速度；
+- Temperature 和 Top-p 对生成文本的影响
+<p align="center">
+  <img src="docs/figures/屏幕截图 2026-09-22 211131.png"
+       alt="不同learning_rate实验对比"
+       width="760">
+</p>
+<p align="center">
+  <img src="docs/figures/屏幕截图 2026-09-22 210744.png"
+       alt="不同d_model实验对比"
+       width="760">
+</p>
+<p align="center">
+  <img src="docs/figures/屏幕截图 2026-09-22 211349.png"
+       alt="不同num_layers实验对比"
+       width="760">
+</p>
+
+固定其他参数，在不同temperature和top-p下生成文本结果在："docs/output-text.md"
+示例：
+```text
+===== Generated Text =====
+temperature=0.8 top_p=0.9
+
+Once upon a time, there was a little girl named Lily. She had a pet bird named Blue. Blue was very small and loved to fly with Lily. They played together every day.
+One day, Lily saw a big red ball in the yard. She wanted to play with it. Blue flew down to Lily and said, "Can I play with the big red ball?" Lily smiled and said, "Yes, let's play together!"
+Lily and Blue played with the big red ball. They had so much fun. After a while, they got tired and decided to rest. Lily said, "Thank you, Blue, for playing with me and the big red ball." Blue smiled and said, "You're welcome, Lily. We had fun today."
+From that day on, Lily and Blue played together every day. They were very happy. And Lily learned that sharing her love and friendship with friends is more important than being small.
+<|endoftext|>
+```text
+
+## 运行
+
+项目使用 `uv` 管理依赖。
+
+```bash
+git clone https://github.com/USERNAME/ground-up-lm.git
+cd ground-up-lm
+uv sync
 ```
-
-Initially, all tests should fail with `NotImplementedError`s.
-To connect your implementation to the tests, complete the
-functions in [./tests/adapters.py](./tests/adapters.py).
-
-### Download data
-Download the TinyStories data and a subsample of OpenWebText
-
-``` sh
-mkdir -p data
-cd data
-
-wget https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStoriesV2-GPT4-train.txt
-wget https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStoriesV2-GPT4-valid.txt
-
-wget https://huggingface.co/datasets/stanford-cs336/owt-sample/resolve/main/owt_train.txt.gz
-gunzip owt_train.txt.gz
-wget https://huggingface.co/datasets/stanford-cs336/owt-sample/resolve/main/owt_valid.txt.gz
-gunzip owt_valid.txt.gz
-
-cd ..
-```
-
