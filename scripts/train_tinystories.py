@@ -1,4 +1,3 @@
-# train_tinystory.py
 import time
 import numpy as np
 import torch
@@ -29,7 +28,6 @@ WARMUP_ITERS=50
 EVAL_INTERVAL=50
 
 def get_batch(data):
-    """随机取 batch，target 比 input 向后移动一个 token。"""
     starts=np.random.randint(0,len(data)-CONTEXT_LENGTH-1,size=BATCH_SIZE)
     x=np.stack([data[i:i+CONTEXT_LENGTH] for i in starts])
     y=np.stack([data[i+1:i+CONTEXT_LENGTH+1] for i in starts])
@@ -39,7 +37,6 @@ def get_batch(data):
 
 @torch.no_grad()
 def evaluate(model,val_data,eval_iters=10):
-    """计算多个 validation batch 的平均 loss。"""
     model.eval()
     losses=[]
     for _ in range(eval_iters):
@@ -53,7 +50,6 @@ def main():
     torch.manual_seed(42)
     np.random.seed(42)
 
-    # 初始化 W&B
     run=wandb.init(
         project="cs336-tinystories",
         name=f"lr_{LR_MAX}",
@@ -116,7 +112,6 @@ def main():
                 "elapsed_time":elapsed
             },step=step)
 
-        # 定期计算 validation loss
         if step%EVAL_INTERVAL==0:
             val_loss=evaluate(model,val_data)
             print(f"         val_loss={val_loss:.4f}")

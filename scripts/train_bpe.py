@@ -1,5 +1,5 @@
 import pickle
-from cs336_basics.train_BPE import train_bpe
+from cs336_basics.bpe import train_bpe
 def main():
     vocab, merges = train_bpe(
         "data/TinyStoriesV2-GPT4-train.txt",

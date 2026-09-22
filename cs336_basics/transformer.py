@@ -1,6 +1,10 @@
 from torch import nn
 import torch
 import math
+
+
+"""---------------LAYERS--------------- """
+
 class Linear(nn.Module):
     def __init__(self, in_features:int,
                   out_features:int,
@@ -35,55 +39,33 @@ class RMSNorm(nn.Module):
     ):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(
-            torch.ones(
-                d_model,
-                device=device,
-                dtype=dtype
-            )
-        )
-
+        self.weight = nn.Parameter(torch.ones(d_model,device=device,dtype=dtype))
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         in_dtype = x.dtype
         x = x.to(torch.float32)
         rms = (x.square().mean(dim=-1, keepdim=True) + self.eps).sqrt()
         out = x / rms * self.weight
         return out.to(in_dtype)
-        return result.to(in_dtype)
+        
 
 class SwiGLU(nn.Module):
-    def __init__(
-        self,
-        d_model: int,
-        d_ff: int,
-        device=None,
-        dtype=None
-    ):
+    def __init__(self,d_model: int,
+                 d_ff: int,
+                 device=None,
+                 dtype=None):
         super().__init__()
-        self.w1 = Linear(
-            d_model,
-            d_ff,
-            device=device,
-            dtype=dtype
-        )
-        self.w2 = Linear(
-            d_ff,
-            d_model,
-            device=device,
-            dtype=dtype
-        )
-        self.w3 = Linear(
-            d_model,
-            d_ff,
-            device=device,
-            dtype=dtype
-        )
+        self.w1 = Linear(d_model,d_ff,device=device,dtype=dtype)
+        self.w2 = Linear(d_ff,d_model,device=device,dtype=dtype)
+        self.w3 = Linear(d_model,d_ff,device=device,dtype=dtype)
     def forward(self, x):
         gate = self.w1(x)
         value = self.w3(x)
-        return self.w2(
-            torch.nn.functional.silu(gate) * value
-        )
+        return self.w2(torch.nn.functional.silu(gate) * value)
+
+    
+
+""" ---------------ATTENTION--------------- """
+
 class RoPE(nn.Module):
     def __init__(self,
                  theta: float, 
@@ -116,6 +98,7 @@ class RoPE(nn.Module):
         out2 = x1 * sin + x2 * cos
         return torch.stack([out1,out2],dim=-1).flatten(-2)#竖过来放，然后再展平
         """ torch.concat([out1.unsqueeze(-1),out2.unsqueeze(-1)],dim=1).flatten(-2) """
+
 def softmax(i:int,
             x:torch.Tensor)->torch.Tensor:
     x0_max=x.max(dim=i,keepdim=True).values
@@ -133,6 +116,7 @@ def scaled_dot_product_attention(query:torch.Tensor,
         scores=scores.masked_fill(~mask,float("-inf"))
     attention=softmax(-1,scores)
     return attention@value#整个序列对key做归一化
+
 def run_rope(
     d_k: int,
     theta: float,
@@ -154,6 +138,7 @@ def run_rope(
     """
     rope=RoPE(theta,d_k,max_seq_len)
     return rope(in_query_or_key,token_positions)
+
 def run_scaled_dot_product_attention(
     Q,
     K,
@@ -174,155 +159,64 @@ def run_scaled_dot_product_attention(
     """
     return scaled_dot_product_attention(Q,K,V,mask)
 
-from einops import rearrange,einsum
+from einops import rearrange
 class multihead_self_attention(nn.Module):
-    def __init__(
-        self,
-        d_model:int,
-        num_heads:int,
-        theta,
-        seq,
-    ):
+    def __init__(self,d_model:int,
+                 num_heads:int,
+                 theta,
+                 seq):
         super().__init__()
         assert d_model % num_heads == 0
         self.d_k = d_model // num_heads
         self.num_heads = num_heads
         self.seq = seq
         self.theta = theta
-        self.q_proj = Linear(
-            d_model,
-            d_model
-        )
-        self.k_proj = Linear(
-            d_model,
-            d_model
-        )
-        self.v_proj = Linear(
-            d_model,
-            d_model
-        )
-        self.output_proj = Linear(
-            d_model,
-            d_model
-        )
+        self.q_proj = Linear(d_model,d_model)
+        self.k_proj = Linear(d_model,d_model)
+        self.v_proj = Linear(d_model,d_model)
+        self.output_proj = Linear(d_model,d_model)
     def forward(self,x):
         q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
-        q = rearrange(
-            q,
-            "... seq (h d) -> ... h seq d",
-            h=self.num_heads
-        )
-        k = rearrange(
-            k,
-            "... seq (h d) -> ... h seq d",
-            h=self.num_heads
-        )
-        v = rearrange(
-            v,
-            "... seq (h d) -> ... h seq d",
-            h=self.num_heads
-        )
+        q = rearrange(q,"... seq (h d) -> ... h seq d",h=self.num_heads)
+        k = rearrange(k,"... seq (h d) -> ... h seq d",h=self.num_heads)
+        v = rearrange(v,"... seq (h d) -> ... h seq d",h=self.num_heads)
         seq_len=x.shape[-2]
-        positions=torch.arange(
-            seq_len,
-            device=x.device
-        )
-        q=run_rope(
-            self.d_k,
-            self.theta,
-            self.seq,
-            q,
-            positions
-        )
-        k=run_rope(
-            self.d_k,
-            self.theta,
-            self.seq,
-            k,
-            positions
-        )
+        positions=torch.arange(seq_len,device=x.device)
+        q=run_rope(self.d_k,self.theta,self.seq,q,positions)
+        k=run_rope(self.d_k,self.theta,self.seq,k,positions)
         mask=torch.tril(
-            torch.ones(
-                seq_len,
-                seq_len,
-                device=x.device
-            )
-        ).bool()
-        out=scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            mask
-        )
-        out=rearrange(
-            out,
-            "... h seq d -> ... seq (h d)"
-        )
+            torch.ones(seq_len,seq_len,device=x.device)).bool()
+        out=scaled_dot_product_attention(q,k,v,mask)
+        out=rearrange(out,"... h seq d -> ... seq (h d)")
         return self.output_proj(out)
+
+
+
+""" ---------------TRANSFORMER--------------- """
+
 class TransformerBlock(nn.Module):
-    def __init__(
-        self,
-        d_model,
-        num_heads,
-        d_ff,
-        theta,
-        seq_len
-    ):
+    def __init__(self,d_model,num_heads,d_ff,theta,seq_len):
         super().__init__()
         self.ln1 = RMSNorm(d_model)
-        self.attn = multihead_self_attention(
-            d_model,
-            num_heads,
-            theta,
-            seq_len
-        )
+        self.attn = multihead_self_attention(d_model,num_heads,theta,seq_len)
         self.ln2 = RMSNorm(d_model)
-        self.ffn = SwiGLU(
-            d_model,
-            d_ff
-        )
+        self.ffn = SwiGLU(d_model,d_ff)
     def forward(self,x):
-        x = x + self.attn(
-            self.ln1(x)
-        )
-        x = x + self.ffn(
-            self.ln2(x)
-        )
+        x = x + self.attn(self.ln1(x))
+        x = x + self.ffn(self.ln2(x))
         return x
+    
 class TransformerLM(nn.Module):
-    def __init__(
-        self,
-        vocab_size,
-        context_length,
-        d_model,
-        num_layers,
-        num_heads,
-        d_ff,
-        rope_theta,
-    ):
+    def __init__(self,vocab_size,context_length,d_model,num_layers,num_heads,d_ff,rope_theta):
         super().__init__()
-        self.token_embeddings = nn.Embedding(
-            vocab_size,
-            d_model
-        )
+        self.token_embeddings = nn.Embedding(vocab_size,d_model)
         self.layers = nn.ModuleList([
-            TransformerBlock(
-                d_model,
-                num_heads,
-                d_ff,
-                rope_theta,
-                context_length
-            )
-            for _ in range(num_layers)
-        ])
+            TransformerBlock(d_model,num_heads,d_ff,rope_theta,context_length)
+            for _ in range(num_layers)])
         self.ln_final = RMSNorm(d_model)
-        self.lm_head = nn.Linear(
-            d_model,
-            vocab_size,
-            bias=False
-        )
+        self.lm_head = nn.Linear(d_model,vocab_size,bias=False)
     def forward(self, in_indices):
         x = self.token_embeddings(in_indices)
         for layer in self.layers:
@@ -330,7 +224,6 @@ class TransformerLM(nn.Module):
         x = self.ln_final(x)
         logits = self.lm_head(x)
         return logits
-
     
 import math
 from typing import Optional,Callable 
@@ -406,7 +299,6 @@ def gradient_clipping(parameters,
             continue
         total_norm+=torch.sum(p.grad**2)
     total_norm=total_norm.sqrt()
-
     if total_norm>l2_norm:
         scale=l2_norm/(total_norm+eps)
         for p in params:
@@ -437,8 +329,8 @@ def load_checkpoint(src, model:nn.Module, optimizer:torch.optim.Optimizer):
     optimizer.load_state_dict(checkpoints["optimizer"])
     return checkpoints["iteration"]
 
-
-import time
+""" 实现整个模块 """
+""" import time
 import wandb
 run=wandb.init(
     project="transformer-experiment",
@@ -503,10 +395,8 @@ def training_together(train_path,
                 "elapsed_time": elapsed_time,
                 },
                 step=iteration
-            )
-             
+            )   
                 model.train()
-
         #checkpoint
         if iteration % save_interval == 0:
             save_checkpoint(
@@ -515,7 +405,22 @@ def training_together(train_path,
                 iteration,
                 checkpoint_path,
             )
-    run.finish()
+    run.finish() """
+
+
+def apply_top_p(probs,top_p):
+    sorted_probs,sorted_indices=torch.sort(sorted_probs,dim=1,descending=True)
+    cumsum_probs=torch.cumsum(probs,-1)
+    sorted_mask=(cumsum_probs-sorted_probs)>top_p
+    sorted_probs=torch.masked_fill(sorted_probs,sorted_mask,0.0)
+    sorted_probs=sorted_probs/sorted_probs.sum(dim=-1,keepdim=True)
+    filtered_probs = torch.zeros_like(probs)
+    filtered_probs.scatter_(
+        dim=-1,
+        index=sorted_indices,
+        src=sorted_probs
+    )
+    return filtered_probs
 
 @torch.no_grad()
 def decode(model:nn.Module,
@@ -555,16 +460,3 @@ def decode(model:nn.Module,
     output0=tokens.squeeze(0).tolist()
     output=tokenizer.decode(output0)
     return output
-def apply_top_p(probs,top_p):
-    sorted_probs,sorted_indices=torch.sort(sorted_probs,dim=1,descending=True)
-    cumsum_probs=torch.cumsum(probs,-1)
-    sorted_mask=(cumsum_probs-sorted_probs)>top_p
-    sorted_probs=torch.masked_fill(sorted_probs,sorted_mask,0.0)
-    sorted_probs=sorted_probs/sorted_probs.sum(dim=-1,keepdim=True)
-    filtered_probs = torch.zeros_like(probs)
-    filtered_probs.scatter_(
-        dim=-1,
-        index=sorted_indices,
-        src=sorted_probs
-    )
-    return filtered_probs

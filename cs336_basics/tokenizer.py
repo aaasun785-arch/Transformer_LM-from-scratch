@@ -1,7 +1,7 @@
 import regex as re
 import os
 import pickle
-from .train_BPE import merge_word
+from .bpe import merge_word
 from collections import defaultdict
 from typing import Iterable,Iterator
 
